@@ -112,23 +112,24 @@ void linearStepper::move(const bool dir, double dist)
     
     digitalWrite(direction, dir);  
     
-    period = 75;            // set initial speed
+    period = minPeriod;            // set initial speed
     digitalWrite(enable, LOW);      // enable board
     //~ Serial.println(steps);
+    
+    uint32_t end = steps*0.25
+    uint32_t begin = steps - end
     
     for(uint32_t i=steps; i > 0; i--)
     {
         oneStep();
             
-        if( i >= 3200)
+        if( i >= begin)
         { 
-            if(period > 18 && i%400 == 0)       // on the first revolutions
-            period--;           // the period of the pulse is decrease to accelerate
+            accel();
         }
-        else if( i < 3200)
+        else if( i < end)
         { 
-            if( i%20 == 0)      // on the last revolution period
-            period++;               // increase to decelerate
+            decel();
         }
         else{}
     }
@@ -141,7 +142,7 @@ void linearStepper::moveLimit(const bool dir, double dist)
     
     digitalWrite(direction, dir);  
     
-    period = 75;                    // set initial speed
+    period = minPeriod;             // set initial speed
     digitalWrite(enable, LOW);      // enable board
     
     for(uint32_t i=steps; i > 0; i--)
@@ -151,15 +152,13 @@ void linearStepper::moveLimit(const bool dir, double dist)
         if(digitalRead(limit2) == 0)
             break;
             
-        if( i >= 3200)
+        if( i >= begin)
         { 
-            if(period > 18 && i%400 == 0)       // on the first revolutions
-            period--;           // the period of the pulse is decrease to accelerate
+            accel();
         }
-        else if( i < 3200)
+        else if( i < end)
         { 
-            if(period < 75 && i%20 == 0)        // on the last revolution period
-            period++;               // increase to decelerate
+            decel();
         }
         else{}
     }
@@ -181,7 +180,7 @@ void linearStepper::moveConst2Limit(const bool dir)
     
     digitalWrite(direction, dir);  
     
-    int period = 50;            // set speed
+    period = (minPeriod+maxPeriod)/2;   // set speed
     digitalWrite(enable, LOW);      // enable board
     
     while(true)
@@ -202,12 +201,12 @@ void linearStepper::moveConst2Limit(const bool dir)
  */
 void linearStepper::moveConst(const bool dir, double dist)
 {
-    uint32_t steps = (dist/travelPerStep)*16;
+    uint32_t steps = dist/travelPerStep;
 
     digitalWrite(direction, dir);  // set direction
+    period = (minPeriod+maxPeriod)/2;   // set speed
     
-    int period = 50;            // set initial speed
-        digitalWrite(enable, LOW);      // enable board
+    digitalWrite(enable, LOW);      // enable board
     //~ Serial.println(steps);
     for(uint32_t i=steps; i > 0; i--)
     {
