@@ -1,7 +1,8 @@
 /*
  * easyLinearStepper.cpp
  * 
- * a library for controlling linear stepper actuators
+ * a library for controlling linear stepper actuators using stepper driver
+ * 
  *  
  * Author: Pedro A. Melendez
  * email: lazy.chino@gmail.com
@@ -12,12 +13,84 @@
 #include "easyLinearStepper.h"
 
 
-void linearStepper::attach(uint8_t dir, uint8_t stp, uint8_t ena, long double distancePerStep)
+inline void linearStepper::oneStep()
+{
+    digitalWrite(step, HIGH);
+    delayMicroseconds(1);
+    digitalWrite(step, LOW);
+    delayMicroseconds(period);
+}
+
+
+void linearStepper::accel()
+{
+    if(period > minPeriod)
+        period -= acceleration;
+}
+
+
+void linearStepper::decel()
+{
+    if(period < maxPeriod)
+        period += acceleration;
+}
+
+void linearStepper::setAccel(unsigned int accelConst)
+{
+    acceleration = accelConst;
+}
+
+void linearStepper::setLimit1(unsigned short limitPin)
+{
+    limit1 = limitPin;
+}
+
+
+void linearStepper::setLimit2(unsigned short limitPin)
+{
+    limit2 = limitPin;    
+}
+
+/* spd2period
+ * 
+ * takes speed on in/s or mm/s and calculate the corresponding period
+ * the speed unit depends on the unit for travel per step
+ * use the SAME UNIT always
+ */
+unsigned int linearStepper::spd2period(double spd)
+{
+    return (travelPerStep/spd)*1000;
+}
+
+
+void linearStepper::setMinSpeed(double spd)
+{
+    maxPeriod = spd2period(spd);
+}
+
+void linearStepper::setMaxSpeed(double spd)
+{
+    minPeriod = spd2period(spd);
+}
+
+
+/*
+ * dir: direction pin 
+ * stp: step pin
+ * ena: enabled motor pin
+ * distancePerStep: linear distance traveled for each step of the motor
+ */
+void linearStepper::attach( 
+                            unsigned short dir, 
+                            unsigned short stp, 
+                            unsigned short ena, 
+                            double distancePerStep
+                        )
 {
     direction = dir;
     step = stp;
     enable = ena;
-    travel_step = distancePerStep;
+    travelPerStep = distancePerStep;
     
     pinMode(dir, OUTPUT);
     pinMode(stp, OUTPUT);
@@ -25,20 +98,6 @@ void linearStepper::attach(uint8_t dir, uint8_t stp, uint8_t ena, long double di
     digitalWrite(ena, HIGH);
 }
 
-void linearStepper::attach(uint8_t dir, uint8_t stp, uint8_t ena, long double distancePerStep, uint8_t limitClose)
-{
-    direction = dir;
-    step = stp;
-    enable = ena;
-    c_limit = limitClose;
-    travel_step = distancePerStep;
-    
-    pinMode(dir, OUTPUT);
-    pinMode(stp, OUTPUT);
-    pinMode(ena, OUTPUT);
-    pinMode(limitClose, INPUT_PULLUP);
-    digitalWrite(ena, HIGH);
-}
 
 
 /**
@@ -49,27 +108,17 @@ void linearStepper::attach(uint8_t dir, uint8_t stp, uint8_t ena, long double di
  */
 void linearStepper::move(const bool dir, double dist)
 {    
-    uint32_t steps = (dist/travel_step)*16;
+    uint32_t steps = dist/travelPerStep;
     
-    if(dir)
-    {
-        digitalWrite(direction, HIGH);  // set direction +
-    }
-    else
-    {
-        digitalWrite(direction, LOW);   // set direction -
-    }
+    digitalWrite(direction, dir);  
     
-    int period = 75;            // set initial speed
+    period = 75;            // set initial speed
     digitalWrite(enable, LOW);      // enable board
     //~ Serial.println(steps);
     
     for(uint32_t i=steps; i > 0; i--)
     {
-        delayMicroseconds(period);      //one square pulse is send to the driver equals one step
-        digitalWrite(step, HIGH);
-        delayMicroseconds(period);
-        digitalWrite(step, LOW);
+        oneStep();
             
         if( i >= 3200)
         { 
@@ -86,30 +135,20 @@ void linearStepper::move(const bool dir, double dist)
     digitalWrite(enable, HIGH);         // disable board
 }
 
-void linearStepper::moveLimit(const bool dir, const double dist)
+void linearStepper::moveLimit(const bool dir, double dist)
 {    
-    uint32_t steps = (dist/travel_step)*16;
+    uint32_t steps = dist/travelPerStep;
     
-    if(dir)
-    {
-    digitalWrite(direction, HIGH);  // set direction outward
-    }
-    else
-    {
-    digitalWrite(direction, LOW);   // set direction inward
-    }
+    digitalWrite(direction, dir);  
     
-    int period = 75;            // set initial speed
+    period = 75;                    // set initial speed
     digitalWrite(enable, LOW);      // enable board
     
     for(uint32_t i=steps; i > 0; i--)
     {
-        delayMicroseconds(period);      //one square pulse is send to the driver equals one step
-        digitalWrite(step, HIGH);
-        delayMicroseconds(period);
-        digitalWrite(step, LOW);
+        oneStep();
         
-        if(digitalRead(c_limit) == 0)
+        if(digitalRead(limit2) == 0)
             break;
             
         if( i >= 3200)
@@ -127,12 +166,9 @@ void linearStepper::moveLimit(const bool dir, const double dist)
     int done = 0;
     while(1)
     {
-        delayMicroseconds(period);      //one square pulse is send to the driver equals one step
-        digitalWrite(step, HIGH);
-        delayMicroseconds(period);
-        digitalWrite(step, LOW);
+        oneStep();
             
-            if(digitalRead(c_limit) == 0)
+        if(digitalRead(limit2) == 0)
             done++;
         if(done == 32000)    
             break;
@@ -143,27 +179,17 @@ void linearStepper::moveLimit(const bool dir, const double dist)
 void linearStepper::moveConst2Limit(const bool dir)
 {    
     
-    if(dir)
-    {
-    digitalWrite(direction, HIGH);  // set direction outward
-    }
-    else
-    {
-    digitalWrite(direction, LOW);   // set direction inward
-    }
+    digitalWrite(direction, dir);  
     
-    int period = 50;            // set initial speed
+    int period = 50;            // set speed
     digitalWrite(enable, LOW);      // enable board
     
-    for(uint32_t i=1000000; 1; i--)
+    while(true)
     {
-    delayMicroseconds(period);      //one square pulse is send to the driver equals one step
-    digitalWrite(step, HIGH);
-    delayMicroseconds(period);
-    digitalWrite(step, LOW);
-        
-    if(digitalRead(c_limit) == 0)
-        break;
+        oneStep();
+            
+        if(digitalRead(limit2) == 0)
+            break;
     }
     digitalWrite(enable, HIGH);         // disable board
 }
@@ -174,30 +200,19 @@ void linearStepper::moveConst2Limit(const bool dir)
  * dir: {0, 1}
  * steps: quatity of microsteps to move, 3200 steps = 1 revolution
  */
-void linearStepper::moveSlow(const bool dir, double dist)
+void linearStepper::moveConst(const bool dir, double dist)
 {
-    uint32_t steps = (dist/travel_step)*16;
-    moveSlow(dir, steps);  
-    
-    if(dir)
-    {
-    digitalWrite(direction, HIGH);  // set direction outward
-    }
-    else
-    {
-    digitalWrite(direction, LOW);   // set direction inward
-    }
+    uint32_t steps = (dist/travelPerStep)*16;
+
+    digitalWrite(direction, dir);  // set direction
     
     int period = 50;            // set initial speed
-    digitalWrite(enable, LOW);      // enable board
+        digitalWrite(enable, LOW);      // enable board
     //~ Serial.println(steps);
     for(uint32_t i=steps; i > 0; i--)
     {
-    delayMicroseconds(period);      //one square pulse is send to the driver equals one step
-    digitalWrite(step, HIGH);
-    delayMicroseconds(period);
-    digitalWrite(step, LOW);
-    //~ Serial.println("step");
+        oneStep();
+        //~ Serial.println("step");
     }
     digitalWrite(enable, HIGH);         // disable board
 }

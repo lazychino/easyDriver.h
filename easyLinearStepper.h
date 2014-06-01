@@ -13,36 +13,44 @@
 
 #include "Arduino.h"
 
-#define OPEN 1
-#define CLOSE 0
-
-#define FORWARD 1
-#define BACKWARD 0
-
 class linearStepper
 {
 private:
     // arduino pins for controlling
-    uint8_t direction;
-    uint8_t enable;
-    uint8_t step;
-    uint8_t o_limit;
-    uint8_t c_limit;
-    long double travel_step;
+    unsigned short direction;
+    unsigned short enable;
+    unsigned short step;
+    unsigned short limit1;
+    unsigned short limit2;
     
+    // variables
+    double travelPerStep;
+    unsigned int period;             // period between step in microseconds
+    unsigned int acceleration;
+    unsigned int minPeriod;
+    unsigned int maxPeriod;
+    
+    inline void oneStep();
+    void accel();
+    void decel();
+    unsigned int spd2period(double);
     
 public:
     linearStepper(){}
     ~linearStepper(){}
-    void attach(uint8_t, uint8_t, uint8_t, long double); 
-    void attach(uint8_t, uint8_t, uint8_t, long double, uint8_t); // with zero limit switch
+    
+    void attach(unsigned short, unsigned short, unsigned short, double); 
     
     void move(const bool, double);
-    void moveLimit(const bool, const double);
-    
-    
-    void moveSlow(const bool, double);
+    void moveLimit(const bool, double);
+    void moveConst(const bool, double);
     void moveConst2Limit(const bool);
+    
+    void setAccel(unsigned int);
+    void setLimit1(unsigned short);
+    void setLimit2(unsigned short);
+    void setMinSpeed(double);
+    void setMaxSpeed(double);
 };
 
 #endif
